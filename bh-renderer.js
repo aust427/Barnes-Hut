@@ -16,6 +16,7 @@ var particleCount, particles, pMaterial, particleSystem;
 
 var root;
 
+var circle = false; 
 var R = 7;
 
 function drawParticles() {
@@ -26,15 +27,23 @@ function drawParticles() {
     size: 0.01
   });
 
+  var r, pX, pY, pZ; 
+
   for (var p = 0; p < particleCount; p++) {
     var phi = 2 * Math.PI * Math.random();
     var theta = Math.acos(Math.random()*2 - 1);
 
-    var r = R * Math.cbrt(Math.random());
+    if (circle) {
+      r = R; 
+      pX = r * Math.cos(phi);
+      pY = r * Math.sin(phi); 
+    }
 
-    var pX = r * Math.sin(theta) * Math.cos(phi);
-    var pY = r * Math.sin(theta) * Math.sin(phi); 
-    var pZ = 0;
+    r = R * Math.cbrt(Math.random());
+
+    pX = r * Math.sin(theta) * Math.cos(phi);
+    pY = r * Math.sin(theta) * Math.sin(phi); 
+    pZ = 0;
 
     var particle = new THREE.Vector3(pX, pY, pZ);
 
@@ -187,7 +196,9 @@ var G = 6.67408 * Math.pow(10, -11);
 // mass in solar masses 
 var m = 2*Math.pow(10, 30);
 // conversion from 1 THREE unit to 
-var r_scale = 9.461 * Math.pow(10, 15);
+var r_scale = 0.4* 9.461 * Math.pow(10, 15);
+
+var eps = Math.pow(10, -15);
 
 var m_scale = 1;
 
@@ -196,12 +207,11 @@ var timestep = 100;
 function gravitationalForce(n, p) {
   var d = distance(n, p);
 
-  if (d == 0) 
-    return [0, 0];
+  if (d == 0) return [0, 0];
 
   var alpha = Math.atan2((n.y_t / n.n - p.y), (n.x_t / n.n - p.x));
 
-  var F = G * (n.n * m) * m / Math.pow(d * r_scale, 2);
+  var F = G * (n.n * m) * m / Math.pow((eps + d) * r_scale, 2);
 
   var Fx = F * Math.cos(alpha); 
   var Fy = F * Math.sin(alpha);
@@ -250,24 +260,46 @@ function forceCalculation(n, p) {
 }
 
 function updateParticles() {
-  fx_p = 0;
-  fy_p = 0;
   for (var i = 0; i < particleCount; i++) {
     var particle = particles.vertices[i];
 
+    // F = ma, so can rearrange into a = F / m
     var F = forceCalculation(root, particle);
-   // console.log(a);
-    particle.velocity.x = particle.velocity.x + F[0] / m * timestep;
-    particle.velocity.y = particle.velocity.y + F[1] / m * timestep;
-    if (F[0] > 0) fx_p += 1;
-    if (F[1] > 0) fy_p += 1;
-    particle.x = particle.x + particle.velocity.x*timestep + 0.5 * F[0] / m * Math.pow(timestep, 2);
-    particle.y = particle.y + particle.velocity.y*timestep + 0.5 * F[1] / m * Math.pow(timestep, 2);
+
+    // v = v0 + at 
+    particle.velocity.x +=  F[0] / m * timestep;
+    particle.velocity.y +=  F[1] / m * timestep;
+
+    // x = x0 + vt + 0.5at^2
+    particle.x += particle.velocity.x * timestep + 0.5 * F[0] / m * Math.pow(timestep, 2); 
+    particle.y += particle.velocity.y * timestep + 0.5 * F[1] / m * Math.pow(timestep, 2);
+
+    if (particle.x > 10 || particle.x < -10) {
+      // "infinite" boundary, where particle escapes 
+      if (infinite) continue;
+      // "looping" boundary, where particle teleports to the other side 
+      if (loop) particle.x = -particle.x;
+      // "mirror" boundary, where particle hits and reflects off wall
+
+    }
+    if (particle.y > 10 || particle.y < -10) {
+      // "infinite boundary 
+      if (infinite) continue;
+      // "looping" boundary
+      if (loop) particle.y = -particle.y;
+      // "mirror" boundary
+      if (mirror) {
+
+      }
+    }
   }
-  //console.log([fx_p, fy_p]);
   particles.verticesNeedUpdate = true;
 }
 
+var mirror, loop = false;
+var infinite = true; 
+
+var play = true; 
 function animate() {
  requestAnimationFrame(animate);
 
@@ -276,7 +308,6 @@ function animate() {
   updateParticles();
 
   renderer.render(scene, camera);
-
 }
 
 function init() {
